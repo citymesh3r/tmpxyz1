@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="City-Mesh3R: Simulation-Ready City-Scale 3D Mesh Reconstruction from Multi-View Images" />
+  <meta name="keywords" content="City-Mesh3R, 3D reconstruction, city-scale mesh, multi-view images, simulation-ready mesh" />
+  <title>City-Mesh3R</title>
+<link rel="stylesheet" href="static/vendor/google-fonts/fonts.css">
+  <link rel="stylesheet" href="static/vendor/bulma/bulma.min.css">
+  <link rel="stylesheet" href="static/vendor/academicons/css/academicons.min.css">
+  <link rel="stylesheet" href="static/vendor/fontawesome/css/all.min.css">
+  <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+  <nav class="navbar is-fixed-top site-nav" aria-label="main navigation">
+    <div class="container">
+      <div class="navbar-brand">
+        <a class="navbar-item brand-mark" href="#hero" data-text="nav.brand">City-Mesh3R</a>
+        <button class="navbar-burger" aria-label="menu" aria-expanded="false" data-target="site-navbar-menu">
+          <span aria-hidden="true"></span><span aria-hidden="true"></span><span aria-hidden="true"></span>
+        </button>
+      </div>
+      <div id="site-navbar-menu" class="navbar-menu">
+        <div class="navbar-end">
+          <a class="navbar-item" href="#abstract" data-text="nav.abstract">Abstract</a>
+          <a class="navbar-item" href="#method" data-text="nav.method">Method</a>
+          <a class="navbar-item" href="#videos" data-text="nav.videos">Videos</a>
+          <a class="navbar-item" href="#image-comparisons" data-text="nav.images">Images</a>
+          <a class="navbar-item" href="#results" data-text="nav.results">Results</a>
+          <a class="navbar-item" href="#bibtex" data-text="nav.bibtex">BibTeX</a>
+          <button id="theme-toggle" class="navbar-item theme-toggle" type="button" aria-label="Toggle light/dark theme">
+            <span class="icon"><i class="fa-solid fa-moon"></i></span>
+            <span class="theme-toggle-label">Dark</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Section order is intentionally controlled here. Move whole <section> blocks to reorder the page. -->
+
+  <section id="hero" class="hero section-pad hero-gradient">
+    <div class="container is-max-widescreen has-text-centered">
+      <p id="hero-eyebrow" class="eyebrow"></p>
+      <h1 id="hero-title" class="main-title"></h1>
+      <div id="authors" class="authors"></div>
+      <div id="affiliations" class="affiliations"></div>
+      <div id="venue-line" class="venue-line"></div>
+      <div id="paper-links" class="button-row"></div>
+      <p id="tagline" class="tagline"></p>
+    </div>
+  </section>
+
+  <section id="teaser" class="section section-pad compact-top">
+    <div class="container is-max-widescreen">
+      <div id="teaser-media" class="media-frame hero-media natural-media"></div>
+      <p id="teaser-caption" class="caption centered-caption"></p>
+    </div>
+  </section>
+
+  <section id="abstract" class="section section-pad alt-bg">
+    <div class="container is-max-desktop">
+      <div class="section-heading centered" data-heading="abstract"></div>
+      <div id="abstract-text" class="paper-text"></div>
+    </div>
+  </section>
+
+  <section id="contributions" class="section section-pad">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="contributions"></div>
+      <div id="contribution-grid" class="card-grid four"></div>
+    </div>
+  </section>
+
+  <section id="method" class="section section-pad alt-bg">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="method"></div>
+      <div id="pipeline-media" class="media-frame natural-media"></div>
+      <p id="pipeline-caption" class="caption centered-caption"></p>
+
+      <br><br>
+      <div class="subsection-block">
+        <div class="section-heading compact" data-heading="areaVisualizer"></div>
+        <div id="area-visualizer" data-video-card="areaPartitioning"></div>
+      </div>
+     
+    </div>
+  </section>
+
+  <section id="videos" class="section section-pad">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="largeScaleVideos"></div>
+
+      <div class="subsection-block">
+        <div class="section-heading compact" data-heading="cameraWalkthrough"></div>
+        <div id="large-scale-camera-walkthrough"></div>
+      </div>
+
+      <div class="subsection-block">
+        <div class="section-heading compact" data-heading="lightStress"></div>
+        <div id="light-stress-comparison"></div>
+      </div>
+
+      <div class="subsection-block" id="image-comparisons">
+        <div class="section-heading compact" data-heading="paperQualitative"></div>
+        <div id="paper-qualitative-comparison"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="garden" class="section section-pad alt-bg">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="garden"></div>
+      <div id="garden-dual-sync"></div>
+    </div>
+  </section>
+
+  <section id="results" class="section section-pad">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="results"></div>
+      <div id="tables"></div>
+    </div>
+  </section>
+
+  <section id="applications" class="section section-pad alt-bg">
+    <div class="container is-max-widescreen">
+      <div class="section-heading centered" data-heading="applications"></div>
+      <div id="applications-grid" class="card-grid four"></div>
+    </div>
+  </section>
+
+  <section id="bibtex" class="section section-pad">
+    <div class="container is-max-desktop">
+      <div class="section-heading centered" data-heading="bibtex"></div>
+      <pre class="bibtex"><code id="bibtex-code"></code></pre>
+    </div>
+  </section>
+
+  <footer class="footer site-footer">
+    <div class="container is-max-desktop has-text-centered">
+      <p id="footer-text"></p>
+    </div>
+  </footer>
+
+  <script src="static/js/data.js"></script>
+  <script src="static/js/analytics.js"></script>
+  <script src="static/js/slider.js"></script>
+  <script src="static/js/app.js"></script>
+</body>
+</html>
