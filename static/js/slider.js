@@ -197,6 +197,66 @@
     return (videos || []).filter(v => v && v.tagName === "VIDEO");
   }
 
+  const videoBlobCache = new Map();
+
+  function getOriginalVideoSrc(video) {
+    return video?.dataset?.src || video?.dataset?.originalSrc || video?.getAttribute?.("src") || "";
+  }
+
+  function setVideoSource(video, src, loadedValue = "1") {
+    if (!video || !src) return;
+    try {
+      video.pause();
+      video.src = src;
+      video.dataset.loaded = loadedValue;
+      video.preload = "auto";
+      video.load();
+    } catch (_) {}
+  }
+
+  function fetchVideoBlobUrl(src) {
+    if (!hasPath(src)) return Promise.resolve(null);
+    if (videoBlobCache.has(src)) return videoBlobCache.get(src);
+
+    const promise = fetch(src, { cache: "force-cache" })
+      .then(resp => {
+        if (!resp.ok) throw new Error(`HTTP ${resp.status} while fetching ${src}`);
+        return resp.blob();
+      })
+      .then(blob => URL.createObjectURL(blob))
+      .catch(err => {
+        videoBlobCache.delete(src);
+        console.warn("[City-Mesh3R] Full video preload failed; falling back to streaming:", src, err);
+        return null;
+      });
+
+    videoBlobCache.set(src, promise);
+    return promise;
+  }
+
+  async function preloadVideoGroupFully(videos, opts = {}) {
+    const playable = getPlayable(videos);
+    if (!playable.length) return [];
+
+    const sources = Array.from(new Set(playable.map(getOriginalVideoSrc).filter(hasPath)));
+    const urlBySrc = new Map();
+
+    await Promise.all(sources.map(async src => {
+      const blobUrl = await fetchVideoBlobUrl(src);
+      urlBySrc.set(src, blobUrl || src);
+    }));
+
+    playable.forEach(video => {
+      const src = getOriginalVideoSrc(video);
+      if (!hasPath(src)) return;
+      if (!video.dataset.originalSrc) video.dataset.originalSrc = src;
+      const localSrc = urlBySrc.get(src) || src;
+      if (video.src !== localSrc) setVideoSource(video, localSrc, localSrc === src ? "1" : "blob");
+    });
+
+    return waitForVideoGroupReady(playable, opts);
+  }
+
   function waitForVideoReady(video, opts = {}) {
     const timeoutMs = Number(opts.timeoutMs || 45000);
     const targetState = Number(opts.targetReadyState || HTMLMediaElement.HAVE_FUTURE_DATA);
@@ -297,41 +357,88 @@
 
   function syncVideos(videos, controlsRoot, opts = {}) {
     const playable = getPlayable(videos);
-    if (!playable.length) return { play(){}, pause(){}, restart(){}, sync(){}, videos: [] };
+    if (!playable.length) return { play(){}, pause(){}, restart(){}, sync(){}, destroy(){}, videos: [] };
     const master = playable[0];
     let internal = false;
+    let destroyed = false;
+
+    const safePlay = (v) => {
+      if (!v || destroyed) return;
+      try { v.play().catch(() => {}); } catch (_) {}
+    };
+    const safePause = (v) => { try { v.pause(); } catch (_) {} };
 
     const syncToMaster = () => {
-      if (internal) return;
+      if (internal || destroyed) return;
       internal = true;
       playable.slice(1).forEach(v => {
         if (Math.abs((v.currentTime || 0) - (master.currentTime || 0)) > 0.12) {
           try { v.currentTime = master.currentTime || 0; } catch (_) {}
         }
         try { v.playbackRate = master.playbackRate; } catch (_) {}
-        if (!master.paused && v.paused) v.play().catch(() => {});
+        if (!master.paused && v.paused) safePlay(v);
       });
       internal = false;
     };
 
-    master.addEventListener("timeupdate", syncToMaster);
-    master.addEventListener("seeked", syncToMaster);
-    master.addEventListener("play", () => playable.forEach(v => { if (v !== master) v.play().catch(() => {}); }));
-    master.addEventListener("pause", () => playable.forEach(v => { if (v !== master) v.pause(); }));
+    const onMasterTimeUpdate = syncToMaster;
+    const onMasterSeeked = syncToMaster;
+    const onMasterPlay = () => playable.forEach(v => { if (v !== master) safePlay(v); });
+    const onMasterPause = () => playable.forEach(v => { if (v !== master) safePause(v); });
+    const onPeerPlay = (e) => {
+      if (destroyed || internal || e.target === master) return;
+      // Non-master videos should never independently drive the group.
+      if (master.paused) safePause(e.target);
+      else syncToMaster();
+    };
+    const onPeerWaiting = () => {
+      if (destroyed) return;
+      // If any video stalls, pause the whole group briefly instead of letting peers drift.
+      playable.forEach(safePause);
+    };
+
+    master.addEventListener("timeupdate", onMasterTimeUpdate);
+    master.addEventListener("seeked", onMasterSeeked);
+    master.addEventListener("play", onMasterPlay);
+    master.addEventListener("pause", onMasterPause);
+    playable.slice(1).forEach(v => {
+      v.addEventListener("play", onPeerPlay);
+      v.addEventListener("waiting", onPeerWaiting);
+      v.addEventListener("stalled", onPeerWaiting);
+    });
 
     const api = {
       videos: playable,
-      play() { playable.forEach(v => v.play().catch(() => {})); },
-      pause() { playable.forEach(v => v.pause()); },
+      play() {
+        if (destroyed) return;
+        syncToMaster();
+        playable.forEach(safePlay);
+      },
+      pause() { playable.forEach(safePause); },
       restart(playAfter = true) {
+        if (destroyed) return;
         playable.forEach(v => {
           try { v.pause(); } catch (_) {}
           try { v.currentTime = 0; } catch (_) {}
         });
         syncToMaster();
-        if (playAfter) playable.forEach(v => v.play().catch(() => {}));
+        if (playAfter) setTimeout(() => { if (!destroyed) playable.forEach(safePlay); }, 60);
       },
-      sync: syncToMaster
+      sync: syncToMaster,
+      destroy() {
+        if (destroyed) return;
+        destroyed = true;
+        playable.forEach(safePause);
+        master.removeEventListener("timeupdate", onMasterTimeUpdate);
+        master.removeEventListener("seeked", onMasterSeeked);
+        master.removeEventListener("play", onMasterPlay);
+        master.removeEventListener("pause", onMasterPause);
+        playable.slice(1).forEach(v => {
+          v.removeEventListener("play", onPeerPlay);
+          v.removeEventListener("waiting", onPeerWaiting);
+          v.removeEventListener("stalled", onPeerWaiting);
+        });
+      }
     };
 
     if (controlsRoot) {
@@ -381,6 +488,7 @@
     unloadMedia,
     syncVideos,
     waitForVideoGroupReady,
+    preloadVideoGroupFully,
     createSliderAnimation,
     observeLazy,
     hasPath,

@@ -232,7 +232,7 @@
 
   function hydrateSliders(card, sliders, controls, opts, loadingRoot) {
     controls?._sliderAnimation?.stop?.();
-    sliders.forEach(s => s?.loadMedia?.());
+    controls?._syncApi?.destroy?.();
     const resetRatio = Number(opts?.initialSlider ?? D.mediaDefaults?.initialSlider ?? 0.5);
     if (controls) {
       controls._resetVisuals = () => sliders.forEach(slider => slider?.setRatio?.(resetRatio));
@@ -255,20 +255,23 @@
     const videos = api.videos || [];
     if (!videos.length) return api;
 
-    setGroupLoading(loadingRoot || card, controls, true);
-    S.waitForVideoGroupReady(videos, { timeoutMs: opts?.readyTimeoutMs || D.mediaDefaults?.readyTimeoutMs || 45000 }).then(results => {
-      if (card.dataset.hydrateToken !== token) return;
+    setGroupLoading(loadingRoot || card, controls, true, "Downloading synced videos…");
+    const readyOpts = { timeoutMs: opts?.readyTimeoutMs || D.mediaDefaults?.readyTimeoutMs || 90000 };
+    S.preloadVideoGroupFully(videos, readyOpts).then(results => {
+      if (card.dataset.hydrateToken !== token) { api.destroy?.(); return; }
       setGroupLoading(loadingRoot || card, controls, false);
       controls?._resetVisuals?.();
       api.restart(Boolean(opts?.autoplayOnVisible));
       const failed = (results || []).some(r => !r.ok);
       if (failed) console.warn("[City-Mesh3R] One or more synced videos did not become ready cleanly.", results);
     }).catch(err => {
-      if (card.dataset.hydrateToken !== token) return;
-      setGroupLoading(loadingRoot || card, controls, false, "Video loading timed out. Try Reset.");
-      console.warn("[City-Mesh3R] Synced video readiness failed", err);
+      if (card.dataset.hydrateToken !== token) { api.destroy?.(); return; }
+      setGroupLoading(loadingRoot || card, controls, false, "Video loading failed. Try Reset.");
+      console.warn("[City-Mesh3R] Synced video preload failed", err);
       controls?._resetVisuals?.();
-      api.restart(Boolean(opts?.autoplayOnVisible));
+      // Last-resort fallback: stream normally, but still start as a group.
+      sliders.forEach(s => s?.loadMedia?.());
+      S.waitForVideoGroupReady(videos, readyOpts).finally(() => api.restart(Boolean(opts?.autoplayOnVisible)));
     });
     return api;
   }
@@ -388,7 +391,8 @@
     }
 
     function render() {
-      activeApi?.pause?.();
+      activeApi?.destroy?.();
+      activeApi = null;
       controls._sliderAnimation?.stop?.();
       const scene = sceneById(sceneCtl.select.value);
       const selectedBaseline = baselineByKey(baselineCtl.select.value);
@@ -540,7 +544,8 @@
     const baselineByKey = key => cfg.baselines.find(x => x.key === key) || cfg.baselines[0];
 
     function render() {
-      activeApi?.pause?.();
+      activeApi?.destroy?.();
+      activeApi = null;
       controls._sliderAnimation?.stop?.();
       const b = baselineByKey(baselineCtl.select.value);
       currentRatio = D.mediaDefaults?.initialSlider || 0.5;
