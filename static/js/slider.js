@@ -197,6 +197,104 @@
     return (videos || []).filter(v => v && v.tagName === "VIDEO");
   }
 
+  function waitForVideoReady(video, opts = {}) {
+    const timeoutMs = Number(opts.timeoutMs || 45000);
+    const targetState = Number(opts.targetReadyState || HTMLMediaElement.HAVE_FUTURE_DATA);
+    return new Promise(resolve => {
+      if (!video || video.tagName !== "VIDEO") return resolve({ ok: false, reason: "not-video", video });
+      if (video.readyState >= targetState && Number.isFinite(video.duration)) {
+        return resolve({ ok: true, reason: "already-ready", video });
+      }
+
+      let done = false;
+      const cleanup = () => {
+        video.removeEventListener("canplay", onReady);
+        video.removeEventListener("canplaythrough", onReady);
+        video.removeEventListener("loadeddata", onReady);
+        video.removeEventListener("error", onError);
+        clearTimeout(timer);
+      };
+      const finish = (ok, reason) => {
+        if (done) return;
+        done = true;
+        cleanup();
+        resolve({ ok, reason, video });
+      };
+      const onReady = () => {
+        if (video.readyState >= targetState || video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          finish(true, "ready");
+        }
+      };
+      const onError = () => finish(false, "error");
+      const timer = setTimeout(() => {
+        // Do not block the UI forever. If the browser has at least metadata/current data,
+        // let the group start; Reset remains available as a manual recovery.
+        finish(video.readyState >= HTMLMediaElement.HAVE_METADATA, "timeout");
+      }, timeoutMs);
+
+      video.addEventListener("canplay", onReady);
+      video.addEventListener("canplaythrough", onReady);
+      video.addEventListener("loadeddata", onReady);
+      video.addEventListener("error", onError);
+      try { if (!video.src && video.dataset?.src) video.src = video.dataset.src; } catch (_) {}
+      try { video.load(); } catch (_) {}
+      onReady();
+    });
+  }
+
+  function waitForVideoGroupReady(videos, opts = {}) {
+    const playable = getPlayable(videos);
+    if (!playable.length) return Promise.resolve([]);
+    return Promise.all(playable.map(v => waitForVideoReady(v, opts)));
+  }
+
+  function createSliderAnimation(sliders, opts = {}) {
+    const list = (sliders || []).filter(Boolean);
+    let raf = 0;
+    let running = false;
+    let lastTime = 0;
+    let direction = 1;
+    let ratio = Number(opts.start ?? opts.initial ?? DEFAULT_RATIO);
+    const min = clamp(Number(opts.min ?? 0.2), 0.02, 0.98);
+    const max = clamp(Number(opts.max ?? 0.8), 0.02, 0.98);
+    const speed = Math.max(0.02, Number(opts.speed ?? 0.12)); // ratio units per second
+    const onStateChange = typeof opts.onStateChange === "function" ? opts.onStateChange : null;
+
+    const apply = (r) => list.forEach(slider => slider?.setRatio?.(r));
+    const tick = (ts) => {
+      if (!running) return;
+      if (!lastTime) lastTime = ts;
+      const dt = Math.min(0.08, Math.max(0, (ts - lastTime) / 1000));
+      lastTime = ts;
+      ratio += direction * speed * dt;
+      if (ratio >= max) { ratio = max; direction = -1; }
+      if (ratio <= min) { ratio = min; direction = 1; }
+      apply(ratio);
+      raf = requestAnimationFrame(tick);
+    };
+
+    const api = {
+      start() {
+        if (running || !list.length) return;
+        running = true;
+        lastTime = 0;
+        onStateChange?.(true);
+        raf = requestAnimationFrame(tick);
+      },
+      stop() {
+        if (!running) return;
+        running = false;
+        cancelAnimationFrame(raf);
+        raf = 0;
+        onStateChange?.(false);
+      },
+      toggle() { running ? api.stop() : api.start(); },
+      isRunning() { return running; },
+      setRatio(r) { ratio = clamp(Number(r), min, max); apply(ratio); }
+    };
+    return api;
+  }
+
   function syncVideos(videos, controlsRoot, opts = {}) {
     const playable = getPlayable(videos);
     if (!playable.length) return { play(){}, pause(){}, restart(){}, sync(){}, videos: [] };
@@ -243,6 +341,7 @@
         controlsRoot.querySelector("[data-action='play']")?.addEventListener("click", () => controlsRoot._syncApi?.play?.());
         controlsRoot.querySelector("[data-action='pause']")?.addEventListener("click", () => controlsRoot._syncApi?.pause?.());
         controlsRoot.querySelector("[data-action='restart']")?.addEventListener("click", () => {
+          controlsRoot._sliderAnimation?.stop?.();
           controlsRoot._resetVisuals?.();
           controlsRoot._syncApi?.restart?.(true);
         });
@@ -281,6 +380,8 @@
     loadMedia,
     unloadMedia,
     syncVideos,
+    waitForVideoGroupReady,
+    createSliderAnimation,
     observeLazy,
     hasPath,
     escapeHtml,

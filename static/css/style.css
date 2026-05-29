@@ -452,3 +452,52 @@ code, pre, .bibtex { font-family: "JetBrains Mono", ui-monospace, SFMono-Regular
   .paper-text { text-align: left; }
   .venue-line a, .venue-line span { border-radius: 18px; }
 }
+
+/* Synced video loading + slider animation controls */
+.responsive-comparison-content,
+.garden-comparison-grid {
+  position: relative;
+}
+.video-loading-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--card-solid) 72%, transparent);
+  backdrop-filter: blur(7px);
+  pointer-events: auto;
+}
+.video-loading-overlay[hidden] { display: none; }
+.video-loading-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.72rem 1rem;
+  border-radius: 999px;
+  color: var(--text);
+  background: color-mix(in srgb, var(--card-solid) 90%, var(--brand));
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow);
+  font-weight: 800;
+  font-size: 0.9rem;
+}
+.video-spinner {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--muted) 35%, transparent);
+  border-top-color: var(--brand);
+  animation: citymesh-spin 0.8s linear infinite;
+}
+@keyframes citymesh-spin { to { transform: rotate(360deg); } }
+.playback-buttons .button.is-active {
+  border-color: var(--brand) !important;
+  color: var(--brand-dark) !important;
+  background: color-mix(in srgb, var(--brand) 14%, var(--card-solid)) !important;
+}
+.playback-buttons .button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}

@@ -138,7 +138,13 @@ window.CITYMESH3R_DATA = {
     loop: true,
     resetSliderOnChange: true,
     initialSlider: 0.5,
-    wideBreakpointPx: 880
+    wideBreakpointPx: 880,
+    
+    sliderAnimation: {
+      min: 0.1,    // left limit = 20%
+      max: 0.9,    // right limit = 80%
+      speed: 0.50  // slider-width units per second
+    }
   },
 
   videos: {
@@ -150,6 +156,7 @@ window.CITYMESH3R_DATA = {
     cameraWalkthrough: {
       id: "camera-walkthrough",
       controls: { showControls: false, autoplayOnVisible: true },
+      sliderAnimation: { min: 0.2, max: 0.8, speed: 0.50 },
       scenes: [
         {
           id: "residence",

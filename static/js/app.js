@@ -177,7 +177,8 @@
     const resetOnly = Boolean(opts.resetOnly);
     const wrap = el("div", `playback-buttons ${showControls || resetOnly ? "" : "is-hidden"}`);
     wrap.innerHTML = resetOnly ? `
-      <button class="button is-small is-rounded" type="button" data-action="restart"><span class="icon"><i class="fa-solid fa-rotate-left"></i></span><span>Reset</span></button>` : `
+      <button class="button is-small is-rounded" type="button" data-action="restart"><span class="icon"><i class="fa-solid fa-rotate-left"></i></span><span>Reset</span></button>
+      <button class="button is-small is-rounded" type="button" data-action="animate-slider"><span class="icon"><i class="fa-solid fa-arrows-left-right"></i></span><span>Animate Slider</span></button>` : `
       <button class="button is-small is-rounded" type="button" data-action="play"><span class="icon"><i class="fa-solid fa-play"></i></span><span>Play</span></button>
       <button class="button is-small is-rounded" type="button" data-action="pause"><span class="icon"><i class="fa-solid fa-pause"></i></span><span>Pause</span></button>
       <button class="button is-small is-rounded" type="button" data-action="restart"><span class="icon"><i class="fa-solid fa-rotate-left"></i></span><span>Restart</span></button>`;
@@ -200,14 +201,75 @@
     return sliders.flatMap(slider => slider?.getVideos ? slider.getVideos() : []);
   }
 
-  function hydrateSliders(card, sliders, controls, opts) {
+  function setGroupLoading(root, controls, isLoading, message = "Loading synced videos…") {
+    if (!root) return;
+    root.classList.toggle("is-video-loading", Boolean(isLoading));
+    let overlay = root.querySelector(":scope > .video-loading-overlay");
+    if (!overlay) {
+      overlay = el("div", "video-loading-overlay");
+      overlay.innerHTML = `<div class="video-loading-box"><span class="video-spinner" aria-hidden="true"></span><span class="video-loading-text"></span></div>`;
+      root.appendChild(overlay);
+    }
+    text(overlay.querySelector(".video-loading-text"), message);
+    overlay.hidden = !isLoading;
+    controls?.querySelectorAll("button[data-action]").forEach(btn => { btn.disabled = Boolean(isLoading); });
+  }
+
+  function wireSliderAnimationButton(controls) {
+    if (!controls || controls.dataset.animateWired) return;
+    controls.dataset.animateWired = "1";
+    const btn = controls.querySelector("[data-action='animate-slider']");
+    btn?.addEventListener("click", () => controls._sliderAnimation?.toggle?.());
+  }
+
+  function setAnimateButtonState(controls, isRunning) {
+    const btn = controls?.querySelector("[data-action='animate-slider']");
+    if (!btn) return;
+    const label = btn.querySelector("span:last-child");
+    if (label) label.textContent = isRunning ? "Stop Animation" : "Animate Slider";
+    btn.classList.toggle("is-active", Boolean(isRunning));
+  }
+
+  function hydrateSliders(card, sliders, controls, opts, loadingRoot) {
+    controls?._sliderAnimation?.stop?.();
     sliders.forEach(s => s?.loadMedia?.());
     const resetRatio = Number(opts?.initialSlider ?? D.mediaDefaults?.initialSlider ?? 0.5);
     if (controls) {
       controls._resetVisuals = () => sliders.forEach(slider => slider?.setRatio?.(resetRatio));
     }
-    const api = S.syncVideos(collectVideos(sliders), controls, { autoplay: Boolean(opts?.autoplayOnVisible) });
-    if (opts?.autoplayOnVisible) api.restart(true);
+
+    const api = S.syncVideos(collectVideos(sliders), controls, { autoplay: false });
+    const token = String((Number(card.dataset.hydrateToken || 0) + 1));
+    card.dataset.hydrateToken = token;
+
+    wireSliderAnimationButton(controls);
+    controls._sliderAnimation = S.createSliderAnimation(sliders, {
+      min: opts?.sliderAnimation?.min ?? D.mediaDefaults?.sliderAnimation?.min ?? 0.2,
+      max: opts?.sliderAnimation?.max ?? D.mediaDefaults?.sliderAnimation?.max ?? 0.8,
+      speed: opts?.sliderAnimation?.speed ?? D.mediaDefaults?.sliderAnimation?.speed ?? 0.12,
+      initial: resetRatio,
+      onStateChange: (running) => setAnimateButtonState(controls, running)
+    });
+    setAnimateButtonState(controls, false);
+
+    const videos = api.videos || [];
+    if (!videos.length) return api;
+
+    setGroupLoading(loadingRoot || card, controls, true);
+    S.waitForVideoGroupReady(videos, { timeoutMs: opts?.readyTimeoutMs || D.mediaDefaults?.readyTimeoutMs || 45000 }).then(results => {
+      if (card.dataset.hydrateToken !== token) return;
+      setGroupLoading(loadingRoot || card, controls, false);
+      controls?._resetVisuals?.();
+      api.restart(Boolean(opts?.autoplayOnVisible));
+      const failed = (results || []).some(r => !r.ok);
+      if (failed) console.warn("[City-Mesh3R] One or more synced videos did not become ready cleanly.", results);
+    }).catch(err => {
+      if (card.dataset.hydrateToken !== token) return;
+      setGroupLoading(loadingRoot || card, controls, false, "Video loading timed out. Try Reset.");
+      console.warn("[City-Mesh3R] Synced video readiness failed", err);
+      controls?._resetVisuals?.();
+      api.restart(Boolean(opts?.autoplayOnVisible));
+    });
     return api;
   }
 
@@ -318,6 +380,7 @@
         bottomLabel: baseline.label,
         mediaOptions: { controls: Boolean(controlsCfg.showControls), muted: controlsCfg.muted !== false, loop: controlsCfg.loop !== false },
         onRatioChange: (ratio, source) => {
+          controls._sliderAnimation?.stop?.();
           currentRatio = ratio;
           S.setRatioMany($$(".comparison-slider", content), ratio, source);
         }
@@ -325,6 +388,8 @@
     }
 
     function render() {
+      activeApi?.pause?.();
+      controls._sliderAnimation?.stop?.();
       const scene = sceneById(sceneCtl.select.value);
       const selectedBaseline = baselineByKey(baselineCtl.select.value);
       currentRatio = controlsCfg.resetSliderOnChange === false ? currentRatio : (controlsCfg.initialSlider || 0.5);
@@ -350,7 +415,7 @@
       const isNarrow = window.matchMedia(`(max-width: ${D.mediaDefaults?.wideBreakpointPx || 880}px)`).matches;
       const activeSliders = isNarrow ? [narrowSlider] : wideSliders;
       if (lazyReady) {
-        activeApi = hydrateSliders(card, activeSliders, controls, controlsCfg);
+        activeApi = hydrateSliders(card, activeSliders, controls, controlsCfg, content);
       }
     }
 
@@ -470,10 +535,13 @@
     card.append(controls, content);
 
     let lazyReady = false;
+    let activeApi = null;
     let currentRatio = D.mediaDefaults?.initialSlider || 0.5;
     const baselineByKey = key => cfg.baselines.find(x => x.key === key) || cfg.baselines[0];
 
     function render() {
+      activeApi?.pause?.();
+      controls._sliderAnimation?.stop?.();
       const b = baselineByKey(baselineCtl.select.value);
       currentRatio = D.mediaDefaults?.initialSlider || 0.5;
       content.innerHTML = "";
@@ -490,6 +558,7 @@
           bottomLabel: b.label,
           mediaOptions: { controls: Boolean(cfg.controls?.showControls), muted: true, loop: true },
           onRatioChange: (ratio, source) => {
+            controls._sliderAnimation?.stop?.();
             currentRatio = ratio;
             S.setRatioMany($$(".comparison-slider", content), ratio, source);
           }
@@ -500,7 +569,7 @@
         content.appendChild(block);
         return slider;
       });
-      if (lazyReady) hydrateSliders(card, sliders, controls, cfg.controls);
+      if (lazyReady) activeApi = hydrateSliders(card, sliders, controls, cfg.controls, content);
     }
 
     baselineCtl.select.addEventListener("change", render);
